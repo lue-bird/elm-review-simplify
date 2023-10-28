@@ -84,6 +84,31 @@ a =
         |> f |> g
 """
                         ]
+        , test "should replace >> when used directly in a multi-|> pipeline (right argument >> inside parentheses)" <|
+            \() ->
+                """module A exposing (..)
+a =
+    b
+        |> h
+        |> (f >> g)
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Use |> instead of >>"
+                            , details =
+                                [ "Because of the precedence of operators, using >> at this location is the same as using |>."
+                                , "Please use |> instead as that is more idiomatic in Elm and generally easier to read."
+                                ]
+                            , under = ">>"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a =
+    b
+        |> h
+        |> f |> g
+"""
+                        ]
         , test "should replace >> when used directly in a |> pipeline (right argument |> >> inside parentheses)" <|
             \() ->
                 """module A exposing (..)
@@ -174,6 +199,31 @@ a =
                             |> Review.Test.whenFixed """module A exposing (..)
 a =
     f <| g
+        <| b
+"""
+                        ]
+        , test "should replace << when used directly in a multi-<| pipeline (left argument << inside parentheses)" <|
+            \() ->
+                """module A exposing (..)
+a =
+    (f << g)
+        <| h
+        <| b
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Use <| instead of <<"
+                            , details =
+                                [ "Because of the precedence of operators, using << at this location is the same as using <|."
+                                , "Please use <| instead as that is more idiomatic in Elm and generally easier to read."
+                                ]
+                            , under = "<<"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a =
+    f <| g
+        <| h
         <| b
 """
                         ]
