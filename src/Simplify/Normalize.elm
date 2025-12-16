@@ -817,9 +817,9 @@ compareRecords leftList rightList acc =
         recordFieldComparisons : List RecordFieldComparison
         recordFieldComparisons =
             Dict.merge
-                (\key _ -> Dict.insert key MissingOtherValue)
-                (\key a b -> Dict.insert key (HasBothValues a b))
-                (\key _ -> Dict.insert key MissingOtherValue)
+                (\key _ soFar -> Dict.insert key MissingOtherValue soFar)
+                (\key a b soFar -> Dict.insert key (HasBothValues a b) soFar)
+                (\key _ soFar -> Dict.insert key MissingOtherValue soFar)
                 leftFields
                 rightFields
                 Dict.empty

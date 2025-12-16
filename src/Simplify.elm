@@ -1529,7 +1529,7 @@ rule : Configuration -> Rule
 rule (Configuration config) =
     Rule.newProjectRuleSchema "Simplify" initialContext
         |> Rule.withDirectDependenciesProjectVisitor
-            (\deps -> dependenciesVisitor (Set.fromList config.ignoreConstructors) deps)
+            (\deps context -> dependenciesVisitor (Set.fromList config.ignoreConstructors) deps context)
         |> Rule.withModuleVisitor (\moduleSchema -> moduleVisitor config moduleSchema)
         |> Rule.withContextFromImportedModules
         |> Rule.withModuleContextUsingContextCreator
@@ -5135,10 +5135,12 @@ findSimilarConditionsError operatorCheckInfo =
         |> findMap
             (\( _, condition ) ->
                 findMap
-                    (areSimilarConditionsError
-                        operatorCheckInfo
-                        operatorCheckInfo.operator
-                        condition
+                    (\conditionOnTheRight ->
+                        areSimilarConditionsError
+                            operatorCheckInfo
+                            operatorCheckInfo.operator
+                            condition
+                            conditionOnTheRight
                     )
                     conditionsOnTheRight
             )
@@ -5492,7 +5494,9 @@ stringFromListChecks : IntoFnCheck
 stringFromListChecks =
     intoFnChecksFirstThatConstructsError
         [ intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck { resultAsString = stringCollection.empty.specific.asString } listCollection)
+            (\checkInfo ->
+                callOnEmptyReturnsCheck { resultAsString = stringCollection.empty.specific.asString } listCollection checkInfo
+            )
         , wrapperFromListSingletonChecks stringCollection
         , onSpecificFnCallReturnsItsLastArgCheck Fn.String.toList
         ]
@@ -5548,12 +5552,12 @@ stringFromFloatChecks =
 
 stringIsEmptyChecks : IntoFnCheck
 stringIsEmptyChecks =
-    intoFnCheckOnlyCall (collectionIsEmptyChecks stringCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionIsEmptyChecks stringCollection checkInfo)
 
 
 stringLengthChecks : IntoFnCheck
 stringLengthChecks =
-    intoFnCheckOnlyCall (collectionSizeChecks stringCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionSizeChecks stringCollection checkInfo)
 
 
 stringSliceChecks : IntoFnCheck
@@ -5663,7 +5667,10 @@ stringReplaceChecks =
 
 stringAppendChecks : IntoFnCheck
 stringAppendChecks =
-    intoFnCheckOnlyCall (collectionUnionChecks { leftElementsStayOnTheLeft = True } stringCollection)
+    intoFnCheckOnlyCall
+        (\checkInfo ->
+            collectionUnionChecks { leftElementsStayOnTheLeft = True } stringCollection checkInfo
+        )
 
 
 stringConcatChecks : IntoFnCheck
@@ -5689,19 +5696,19 @@ stringJoinChecks =
 
 stringRepeatChecks : IntoFnCheck
 stringRepeatChecks =
-    intoFnCheckOnlyCall (emptiableFlatRepeatChecks stringCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFlatRepeatChecks stringCollection checkInfo)
 
 
 stringWordsChecks : IntoFnCheck
 stringWordsChecks =
     intoFnCheckOnlyCall
-        (callOnEmptyReturnsCheck { resultAsString = \_ -> "[ \"\" ]" } stringCollection)
+        (\checkInfo -> callOnEmptyReturnsCheck { resultAsString = \_ -> "[ \"\" ]" } stringCollection checkInfo)
 
 
 stringLinesChecks : IntoFnCheck
 stringLinesChecks =
     intoFnCheckOnlyCall
-        (callOnEmptyReturnsCheck { resultAsString = \_ -> "[ \"\" ]" } stringCollection)
+        (\checkInfo -> callOnEmptyReturnsCheck { resultAsString = \_ -> "[ \"\" ]" } stringCollection checkInfo)
 
 
 stringToListChecks : IntoFnCheck
@@ -5711,12 +5718,12 @@ stringToListChecks =
 
 stringFoldlChecks : IntoFnCheck
 stringFoldlChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks stringCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks stringCollection checkInfo)
 
 
 stringFoldrChecks : IntoFnCheck
 stringFoldrChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks stringCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks stringCollection checkInfo)
 
 
 
@@ -5859,7 +5866,7 @@ resultFromMaybeWithEmptyValueOnNothingCheck =
 listAppendChecks : IntoFnCheck
 listAppendChecks =
     intoFnCheckOnlyCall
-        (collectionUnionChecks { leftElementsStayOnTheLeft = True } listCollection)
+        (\checkInfo -> collectionUnionChecks { leftElementsStayOnTheLeft = True } listCollection checkInfo)
 
 
 listConcatChecks : IntoFnCheck
@@ -5870,7 +5877,7 @@ listConcatChecks =
         , emptiableFlatFromListChecks listCollection
         , intoFnCheckOnlyCall
             (\checkInfo ->
-                case fromListGetLiteral listCollection checkInfo.lookupTable checkInfo.firstArg of
+                (case fromListGetLiteral listCollection checkInfo.lookupTable checkInfo.firstArg of
                     Just listLiteral ->
                         if List.all AstHelpers.isListLiteral listLiteral.elements then
                             Just
@@ -5889,15 +5896,19 @@ listConcatChecks =
 
                     Nothing ->
                         Nothing
+                )
+                    |> onNothing (\() -> mergeConsecutiveFromListLiteralsCheck listCollection checkInfo)
             )
-        , intoFnCheckOnlyCall (mergeConsecutiveFromListLiteralsCheck listCollection)
         ]
 
 
 listConcatMapChecks : IntoFnCheck
 listConcatMapChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (operationWithIdentityIsEquivalentToFnCheck Fn.List.concat)
+        [ intoFnCheckOnlyCall
+            (\checkInfo ->
+                operationWithIdentityIsEquivalentToFnCheck Fn.List.concat checkInfo
+            )
         , emptiableFlatMapChecks listCollection
         , wrapperFlatMapChecks listCollection
         ]
@@ -5907,7 +5918,10 @@ listIndexedMapChecks : IntoFnCheck
 listIndexedMapChecks =
     intoFnChecksFirstThatConstructsError
         [ unnecessaryOnEmptyCheck listCollection
-        , intoFnCheckOnlyCall (operationWithExtraArgChecks { operationWithoutExtraArg = Fn.List.map })
+        , intoFnCheckOnlyCall
+            (\checkInfo ->
+                operationWithExtraArgChecks { operationWithoutExtraArg = Fn.List.map } checkInfo
+            )
         ]
 
 
@@ -6072,7 +6086,7 @@ listMapChecks =
 
 listMapNChecks : IntoFnCheck
 listMapNChecks =
-    intoFnCheckOnlyCall (emptiableMapNChecks listCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableMapNChecks listCollection checkInfo)
 
 
 listMapOnSingletonCheck : IntoFnCheck
@@ -6129,7 +6143,7 @@ listMapOnSingletonCheck =
                     )
                         |> onNothing
                             (\() ->
-                                case sameInAllBranches (getValueWithNodeRange (listCollection.wrap.getValue checkInfo.lookupTable)) listArg of
+                                case sameInAllBranches (\branch -> getValueWithNodeRange (listCollection.wrap.getValue checkInfo.lookupTable) branch) listArg of
                                     Just wraps ->
                                         let
                                             mappingArgRange : Range
@@ -6242,7 +6256,9 @@ listMinimumChecks : IntoFnCheck
 listMinimumChecks =
     intoFnChecksFirstThatConstructsError
         [ intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck { resultAsString = maybeWithJustAsWrap.empty.specific.asString } listCollection)
+            (\checkInfo ->
+                callOnEmptyReturnsCheck { resultAsString = maybeWithJustAsWrap.empty.specific.asString } listCollection checkInfo
+            )
         , onWrappedReturnsJustItsValueCheck listCollection
         ]
 
@@ -6251,7 +6267,9 @@ listMaximumChecks : IntoFnCheck
 listMaximumChecks =
     intoFnChecksFirstThatConstructsError
         [ intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck { resultAsString = maybeWithJustAsWrap.empty.specific.asString } listCollection)
+            (\checkInfo ->
+                callOnEmptyReturnsCheck { resultAsString = maybeWithJustAsWrap.empty.specific.asString } listCollection checkInfo
+            )
         , onWrappedReturnsJustItsValueCheck listCollection
         ]
 
@@ -6269,7 +6287,7 @@ listFoldrChecks =
 listFoldAnyDirectionChecks : IntoFnCheck
 listFoldAnyDirectionChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (emptiableFoldChecks listCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks listCollection checkInfo)
         , intoFnCheckOnlyCall
             (\checkInfo ->
                 case secondArg checkInfo of
@@ -6450,7 +6468,7 @@ listFoldAnyDirectionChecks =
 listIsEmptyChecks : IntoFnCheck
 listIsEmptyChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionIsEmptyChecks listCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> collectionIsEmptyChecks listCollection checkInfo)
         , onSpecificFnCallCanBeCombinedCheck
             { args = []
             , earlierFn = Fn.Set.toList
@@ -6487,7 +6505,7 @@ listIsEmptyChecks =
 listLengthChecks : IntoFnCheck
 listLengthChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionSizeChecks listCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> collectionSizeChecks listCollection checkInfo)
         , onSpecificFnCallCanBeCombinedCheck
             { args = []
             , earlierFn = Fn.Dict.toList
@@ -6548,7 +6566,7 @@ listFilterChecks =
 
 listPartitionChecks : IntoFnCheck
 listPartitionChecks =
-    intoFnCheckOnlyCall (collectionPartitionChecks listCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionPartitionChecks listCollection checkInfo)
 
 
 listFilterMapChecks : IntoFnCheck
@@ -6608,7 +6626,7 @@ listFilterMapChecks =
 
 listRangeChecks : IntoFnCheck
 listRangeChecks =
-    intoFnCheckOnlyCall (emptiableRangeChecks listCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableRangeChecks listCollection checkInfo)
 
 
 listRepeatChecks : IntoFnCheck
@@ -6658,7 +6676,7 @@ listSortByChecks =
                     Nothing ->
                         Nothing
             )
-        , intoFnCheckOnlyCall (operationWithIdentityIsEquivalentToFnCheck Fn.List.sort)
+        , intoFnCheckOnlyCall (\checkInfo -> operationWithIdentityIsEquivalentToFnCheck Fn.List.sort checkInfo)
         , operationDoesNotChangeResultOfOperationCheck
         , unnecessaryOnSpecificFnCallCheck Fn.List.repeat
         ]
@@ -6759,7 +6777,9 @@ listDropChecks =
 listUnzipChecks : IntoFnCheck
 listUnzipChecks =
     intoFnCheckOnlyCall
-        (callOnEmptyReturnsCheck { resultAsString = \_ -> "( [], [] )" } listCollection)
+        (\checkInfo ->
+            callOnEmptyReturnsCheck { resultAsString = \_ -> "( [], [] )" } listCollection checkInfo
+        )
 
 
 
@@ -6770,7 +6790,9 @@ arrayToListChecks : IntoFnCheck
 arrayToListChecks =
     intoFnChecksFirstThatConstructsError
         [ intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck { resultAsString = listCollection.empty.specific.asString } arrayCollection)
+            (\checkInfo ->
+                callOnEmptyReturnsCheck { resultAsString = listCollection.empty.specific.asString } arrayCollection checkInfo
+            )
         , onSpecificFnCallReturnsItsLastArgCheck Fn.Array.fromList
         , onSpecificFnCallCanBeCombinedCheck
             { args = [], earlierFn = Fn.Array.repeat, combinedFn = Fn.List.repeat }
@@ -6780,25 +6802,27 @@ arrayToListChecks =
 arrayToIndexedListChecks : IntoFnCheck
 arrayToIndexedListChecks =
     intoFnCheckOnlyCall
-        (callOnEmptyReturnsCheck { resultAsString = listCollection.empty.specific.asString } arrayCollection)
+        (\checkInfo ->
+            callOnEmptyReturnsCheck { resultAsString = listCollection.empty.specific.asString } arrayCollection checkInfo
+        )
 
 
 arrayFromListChecks : IntoFnCheck
 arrayFromListChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (emptiableFromListChecks arrayCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> emptiableFromListChecks arrayCollection checkInfo)
         , onSpecificFnCallReturnsItsLastArgCheck Fn.Array.toList
         ]
 
 
 arrayRepeatChecks : IntoFnCheck
 arrayRepeatChecks =
-    intoFnCheckOnlyCall (emptiableRepeatChecks arrayCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableRepeatChecks arrayCollection checkInfo)
 
 
 arrayInitializeChecks : IntoFnCheck
 arrayInitializeChecks =
-    intoFnCheckOnlyCall (emptiableRepeatChecks arrayCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableRepeatChecks arrayCollection checkInfo)
 
 
 arrayMapChecks : IntoFnCheck
@@ -6810,14 +6834,17 @@ arrayIndexedMapChecks : IntoFnCheck
 arrayIndexedMapChecks =
     intoFnChecksFirstThatConstructsError
         [ unnecessaryOnEmptyCheck arrayCollection
-        , intoFnCheckOnlyCall (operationWithExtraArgChecks { operationWithoutExtraArg = Fn.Array.map })
+        , intoFnCheckOnlyCall
+            (\checkInfo ->
+                operationWithExtraArgChecks { operationWithoutExtraArg = Fn.Array.map } checkInfo
+            )
         ]
 
 
 arrayIsEmptyChecks : IntoFnCheck
 arrayIsEmptyChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionIsEmptyChecks arrayCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> collectionIsEmptyChecks arrayCollection checkInfo)
         , onSpecificFnCallCanBeCombinedCheck
             { args = []
             , earlierFn = Fn.Array.fromList
@@ -6844,7 +6871,7 @@ arrayLengthChecks =
 
 arrayGetChecks : IntoFnCheck
 arrayGetChecks =
-    intoFnCheckOnlyCall (getChecks arrayCollection)
+    intoFnCheckOnlyCall (\checkInfo -> getChecks arrayCollection checkInfo)
 
 
 arrayLengthOnArrayRepeatOrInitializeChecks : CallCheckInfo -> Maybe (Error {})
@@ -6903,17 +6930,20 @@ arrayFilterChecks =
 
 arrayAppendChecks : IntoFnCheck
 arrayAppendChecks =
-    intoFnCheckOnlyCall (collectionUnionChecks { leftElementsStayOnTheLeft = True } arrayCollection)
+    intoFnCheckOnlyCall
+        (\checkInfo ->
+            collectionUnionChecks { leftElementsStayOnTheLeft = True } arrayCollection checkInfo
+        )
 
 
 arrayFoldlChecks : IntoFnCheck
 arrayFoldlChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks arrayCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks arrayCollection checkInfo)
 
 
 arrayFoldrChecks : IntoFnCheck
 arrayFoldrChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks arrayCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks arrayCollection checkInfo)
 
 
 
@@ -6923,7 +6953,7 @@ arrayFoldrChecks =
 setFromListChecks : IntoFnCheck
 setFromListChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (emptiableFromListChecks setCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> emptiableFromListChecks setCollection checkInfo)
         , wrapperFromListSingletonChecks setCollection
         , onSpecificFnCallReturnsItsLastArgCheck Fn.Set.toList
         , intoFnCheckOnlyCall
@@ -7015,7 +7045,7 @@ findWithAccAndLookahead f acc list =
 setIsEmptyChecks : IntoFnCheck
 setIsEmptyChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionIsEmptyChecks setCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> collectionIsEmptyChecks setCollection checkInfo)
         , onSpecificFnCallCanBeCombinedCheck
             { args = []
             , earlierFn = Fn.Set.fromList
@@ -7026,7 +7056,7 @@ setIsEmptyChecks =
 
 setSizeChecks : IntoFnCheck
 setSizeChecks =
-    intoFnCheckOnlyCall (collectionSizeChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionSizeChecks setCollection checkInfo)
 
 
 setMemberChecks : IntoFnCheck
@@ -7044,7 +7074,7 @@ setMemberChecks =
 
 setInsertChecks : IntoFnCheck
 setInsertChecks =
-    intoFnCheckOnlyCall (collectionInsertChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionInsertChecks setCollection checkInfo)
 
 
 setRemoveChecks : IntoFnCheck
@@ -7059,7 +7089,7 @@ setFilterChecks =
 
 setPartitionChecks : IntoFnCheck
 setPartitionChecks =
-    intoFnCheckOnlyCall (collectionPartitionChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionPartitionChecks setCollection checkInfo)
 
 
 setIntersectChecks : IntoFnCheck
@@ -7069,13 +7099,16 @@ setIntersectChecks =
 
 setDiffChecks : IntoFnCheck
 setDiffChecks =
-    intoFnCheckOnlyCall (collectionDiffChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionDiffChecks setCollection checkInfo)
 
 
 setUnionChecks : IntoFnCheck
 setUnionChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionUnionChecks { leftElementsStayOnTheLeft = True } setCollection)
+        [ intoFnCheckOnlyCall
+            (\checkInfo ->
+                collectionUnionChecks { leftElementsStayOnTheLeft = True } setCollection checkInfo
+            )
         , withTwoEqualArgumentsReturnsLastCheck
         , unionWithFirstArgWrappedCanBeCombinedInto
             { combinedFn = Fn.Set.insert
@@ -7159,17 +7192,17 @@ setMapChecks =
 
 setToListChecks : IntoFnCheck
 setToListChecks =
-    intoFnCheckOnlyCall (emptiableToListChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableToListChecks setCollection checkInfo)
 
 
 setFoldlChecks : IntoFnCheck
 setFoldlChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks setCollection checkInfo)
 
 
 setFoldrChecks : IntoFnCheck
 setFoldrChecks =
-    intoFnCheckOnlyCall (emptiableFoldChecks setCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldChecks setCollection checkInfo)
 
 
 
@@ -7179,7 +7212,7 @@ setFoldrChecks =
 dictFromListChecks : IntoFnCheck
 dictFromListChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (emptiableFromListChecks dictCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> emptiableFromListChecks dictCollection checkInfo)
         , onSpecificFnCallReturnsItsLastArgCheck Fn.Dict.toList
         , intoFnCheckOnlyCall
             (\checkInfo ->
@@ -7274,7 +7307,7 @@ isAnyTheSameAsBy first rest =
 dictIsEmptyChecks : IntoFnCheck
 dictIsEmptyChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionIsEmptyChecks dictCollection)
+        [ intoFnCheckOnlyCall (\checkInfo -> collectionIsEmptyChecks dictCollection checkInfo)
         , onSpecificFnCallCanBeCombinedCheck
             { args = []
             , earlierFn = Fn.Dict.fromList
@@ -7285,7 +7318,7 @@ dictIsEmptyChecks =
 
 dictSizeChecks : IntoFnCheck
 dictSizeChecks =
-    intoFnCheckOnlyCall (collectionSizeChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionSizeChecks dictCollection checkInfo)
 
 
 dictMemberChecks : IntoFnCheck
@@ -7427,7 +7460,7 @@ dictFilterChecks =
 
 dictPartitionChecks : IntoFnCheck
 dictPartitionChecks =
-    intoFnCheckOnlyCall (emptiablePartitionWithExtraArgChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiablePartitionWithExtraArgChecks dictCollection checkInfo)
 
 
 dictMapChecks : IntoFnCheck
@@ -7442,13 +7475,16 @@ dictIntersectChecks =
 
 dictDiffChecks : IntoFnCheck
 dictDiffChecks =
-    intoFnCheckOnlyCall (collectionDiffChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> collectionDiffChecks dictCollection checkInfo)
 
 
 dictUnionChecks : IntoFnCheck
 dictUnionChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (collectionUnionChecks { leftElementsStayOnTheLeft = False } dictCollection)
+        [ intoFnCheckOnlyCall
+            (\checkInfo ->
+                collectionUnionChecks { leftElementsStayOnTheLeft = False } dictCollection checkInfo
+            )
         , withTwoEqualArgumentsReturnsLastCheck
         , unionWithFirstArgWrappedCanBeCombinedInto
             { combinedFn = Fn.Dict.insert
@@ -7462,17 +7498,17 @@ dictUnionChecks =
 
 dictToListChecks : IntoFnCheck
 dictToListChecks =
-    intoFnCheckOnlyCall (emptiableToListChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableToListChecks dictCollection checkInfo)
 
 
 dictFoldlChecks : IntoFnCheck
 dictFoldlChecks =
-    intoFnCheckOnlyCall (emptiableFoldWithExtraArgChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldWithExtraArgChecks dictCollection checkInfo)
 
 
 dictFoldrChecks : IntoFnCheck
 dictFoldrChecks =
-    intoFnCheckOnlyCall (emptiableFoldWithExtraArgChecks dictCollection)
+    intoFnCheckOnlyCall (\checkInfo -> emptiableFoldWithExtraArgChecks dictCollection checkInfo)
 
 
 
@@ -7553,7 +7589,7 @@ taskSequenceChecks =
     intoFnChecksFirstThatConstructsError
         [ listOfWrapperSequenceChecks taskWithSucceedAsWrap
         , intoFnCheckOnlyCall
-            (sequenceOrFirstEmptyChecks ( listCollection, taskWithSucceedAsWrap ))
+            (\checkInfo -> sequenceOrFirstEmptyChecks ( listCollection, taskWithSucceedAsWrap ) checkInfo)
         ]
 
 
@@ -7718,23 +7754,23 @@ jsonDecodeOneOfChecks =
 
 randomUniformChecks : IntoFnCheck
 randomUniformChecks =
-    intoFnCheckOnlyCall (oneOfConstantsWithOneAndRestListChecks randomGeneratorWrapper)
+    intoFnCheckOnlyCall (\checkInfo -> oneOfConstantsWithOneAndRestListChecks randomGeneratorWrapper checkInfo)
 
 
 randomWeightedChecks : IntoFnCheck
 randomWeightedChecks =
-    intoFnCheckOnlyCall (oneOfWeightedConstantsWithOneAndRestChecks randomGeneratorWrapper)
+    intoFnCheckOnlyCall (\checkInfo -> oneOfWeightedConstantsWithOneAndRestChecks randomGeneratorWrapper checkInfo)
 
 
 randomListChecks : IntoFnCheck
 randomListChecks =
-    intoFnCheckOnlyCall (sequenceRepeatChecks randomGeneratorWrapper)
+    intoFnCheckOnlyCall (\checkInfo -> sequenceRepeatChecks randomGeneratorWrapper checkInfo)
 
 
 randomMapChecks : IntoFnCheck
 randomMapChecks =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (mapIdentityChecks randomGeneratorWrapper)
+        [ intoFnCheckOnlyCall (\checkInfo -> mapIdentityChecks randomGeneratorWrapper checkInfo)
         , mapOnWrappedChecks randomGeneratorWrapper
         , nonEmptiableWrapperMapAlwaysChecks randomGeneratorWrapper
         ]
@@ -7744,7 +7780,7 @@ randomAndThenChecks : IntoFnCheck
 randomAndThenChecks =
     intoFnChecksFirstThatConstructsError
         [ wrapperFlatMapChecks randomGeneratorWrapper
-        , intoFnCheckOnlyCall (nonEmptiableWrapperFlatMapAlwaysChecks randomGeneratorWrapper)
+        , intoFnCheckOnlyCall (\checkInfo -> nonEmptiableWrapperFlatMapAlwaysChecks randomGeneratorWrapper checkInfo)
         ]
 
 
@@ -8899,7 +8935,7 @@ dictDetermineSize resources expressionNode =
                         case listGetElements resources fromListCall.firstArg of
                             Just listElements ->
                                 if listElements.allKnown then
-                                    case traverse (getTupleWithComparableFirst resources.lookupTable) listElements.known of
+                                    case traverse (\element -> getTupleWithComparableFirst resources.lookupTable element) listElements.known of
                                         Just comparableKeyExpressions ->
                                             comparableKeyExpressions |> countUniqueBy .comparableFirst |> Exactly |> Just
 
@@ -8961,7 +8997,7 @@ dictGetValues resources expressionNode =
                             case listGetElements resources fromListCall.firstArg of
                                 Just listElements ->
                                     if listElements.allKnown then
-                                        case traverse (getTupleWithComparableFirst resources.lookupTable) listElements.known of
+                                        case traverse (\element -> getTupleWithComparableFirst resources.lookupTable element) listElements.known of
                                             Just tuplesWithComparableKey ->
                                                 Just
                                                     { known = uniqueByThenMap .comparableFirst .second tuplesWithComparableKey
@@ -9033,7 +9069,7 @@ dictGetKeys resources expressionNode =
                             case listGetElements resources fromListCall.firstArg of
                                 Just listElements ->
                                     if listElements.allKnown then
-                                        case traverse (getTupleWithComparableFirst resources.lookupTable) listElements.known of
+                                        case traverse (\element -> getTupleWithComparableFirst resources.lookupTable element) listElements.known of
                                             Just tuplesWithComparableKey ->
                                                 Just
                                                     { known =
@@ -9268,7 +9304,7 @@ emptiableMapChecks :
     -> IntoFnCheck
 emptiableMapChecks emptiable =
     intoFnChecksFirstThatConstructsError
-        [ intoFnCheckOnlyCall (mapIdentityChecks emptiable)
+        [ intoFnCheckOnlyCall (\checkInfo -> mapIdentityChecks emptiable checkInfo)
         , unnecessaryOnEmptyCheck emptiable
         ]
 
@@ -9383,7 +9419,7 @@ mapOnWrappedChecks wrapper =
                                 )
 
                         Nothing ->
-                            case sameInAllBranches (getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable)) wrapperArg of
+                            case sameInAllBranches (\branch -> getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable) branch) wrapperArg of
                                 Just wraps ->
                                     let
                                         mappingArgRange : Range
@@ -9576,7 +9612,7 @@ emptiableFlatMapChecks emptiable =
             (\checkInfo ->
                 case toConstructedResult checkInfo.lookupTable checkInfo.firstArg of
                     Just constructed ->
-                        if trueInAllBranches (isInTypeSubset emptiable.empty checkInfo) constructed then
+                        if trueInAllBranches (\branch -> isInTypeSubset emptiable.empty checkInfo branch) constructed then
                             Just
                                 (alwaysResultsInUnparenthesizedConstantError
                                     (qualifiedToString checkInfo.fn ++ " with a function that will always return " ++ emptiable.empty.specific.description)
@@ -9621,7 +9657,7 @@ wrapperFlatMapChecks wrapper =
                 \checkInfo ->
                     case secondArg checkInfo of
                         Just maybeArg ->
-                            case sameInAllBranches (getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable)) maybeArg of
+                            case sameInAllBranches (\branch -> getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable) branch) maybeArg of
                                 Just wrapCalls ->
                                     Just
                                         (Rule.errorWithFix
@@ -9701,7 +9737,7 @@ withDefaultChecks :
 withDefaultChecks emptiable =
     intoFnChecksFirstThatConstructsError
         [ onWrappedReturnsItsValueCheck emptiable
-        , intoFnCheckOnlyCall (emptiableWithDefaultChecks emptiable)
+        , intoFnCheckOnlyCall (\checkInfo -> emptiableWithDefaultChecks emptiable checkInfo)
         ]
 
 
@@ -9790,9 +9826,11 @@ unwrapToMaybeChecks emptiableWrapper =
     intoFnChecksFirstThatConstructsError
         [ onWrappedReturnsJustItsValueCheck emptiableWrapper
         , intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck
-                { resultAsString = \res -> qualifiedToString (qualify Fn.Maybe.nothingVariant res) }
-                emptiableWrapper
+            (\checkInfo ->
+                callOnEmptyReturnsCheck
+                    { resultAsString = \res -> qualifiedToString (qualify Fn.Maybe.nothingVariant res) }
+                    emptiableWrapper
+                    checkInfo
             )
         ]
 
@@ -9915,7 +9953,7 @@ emptiableFlatFromListChecks : EmptiableProperties ConstantProperties otherProper
 emptiableFlatFromListChecks emptiable =
     intoFnChecksFirstThatConstructsError
         [ onWrappedReturnsItsValueCheck listCollection
-        , intoFnCheckOnlyCall (callOnEmptyReturnsCheck { resultAsString = emptiable.empty.specific.asString } listCollection)
+        , intoFnCheckOnlyCall (\checkInfo -> callOnEmptyReturnsCheck { resultAsString = emptiable.empty.specific.asString } listCollection checkInfo)
         , intoFnCheckOnlyCall
             (\checkInfo ->
                 callOnFromListWithIrrelevantEmptyElement (qualifiedToString (qualify checkInfo.fn defaultQualifyResources))
@@ -9998,7 +10036,7 @@ callOnFromListWithIrrelevantEmptyElement situation ( constructibleFromList, empt
         Just collectionArg ->
             case fromListGetLiteral constructibleFromList checkInfo.lookupTable collectionArg of
                 Just listLiteral ->
-                    case findMapNeighboring (getEmptyExpressionNode checkInfo emptiableElement) listLiteral.elements of
+                    case findMapNeighboring (\element -> getEmptyExpressionNode checkInfo emptiableElement element) listLiteral.elements of
                         Just emptyLiteralAndNeighbors ->
                             Just
                                 (Rule.errorWithFix
@@ -10416,7 +10454,7 @@ callOnCollectionWithAbsorbingElementChecks :
 callOnCollectionWithAbsorbingElementChecks situation ( collection, elementAbsorbable ) checkInfo =
     case Maybe.andThen (\lastArg -> collection.elements.get (extractInferResources checkInfo) lastArg) (fullyAppliedLastArg checkInfo) of
         Just elements ->
-            case findMap (getAbsorbingExpressionNode elementAbsorbable checkInfo) elements.known of
+            case findMap (\element -> getAbsorbingExpressionNode elementAbsorbable checkInfo element) elements.known of
                 Just absorbingElement ->
                     Just
                         (Rule.errorWithFix
@@ -10879,14 +10917,16 @@ listOfWrapperSequenceChecks : WrapperProperties (MappableProperties otherPropert
 listOfWrapperSequenceChecks wrapper =
     intoFnChecksFirstThatConstructsError
         [ intoFnCheckOnlyCall
-            (callOnEmptyReturnsCheck
-                { resultAsString =
-                    \res -> qualifiedToString (qualify wrapper.wrap.fn res) ++ " []"
-                }
-                listCollection
+            (\checkInfo ->
+                callOnEmptyReturnsCheck
+                    { resultAsString =
+                        \res -> qualifiedToString (qualify wrapper.wrap.fn res) ++ " []"
+                    }
+                    listCollection
+                    checkInfo
             )
         , onWrappedIsEquivalentToMapWrapOnValueCheck ( listCollection, wrapper )
-        , intoFnCheckOnlyCall (sequenceOnCollectionWithAllElementsWrapped ( listCollection, wrapper ))
+        , intoFnCheckOnlyCall (\checkInfo -> sequenceOnCollectionWithAllElementsWrapped ( listCollection, wrapper ) checkInfo)
         ]
 
 
@@ -10909,7 +10949,7 @@ sequenceOnCollectionWithAllElementsWrapped ( collection, elementWrapper ) checkI
     case collection.elements.get (extractInferResources checkInfo) checkInfo.firstArg of
         Just elements ->
             if elements.allKnown then
-                case traverse (getValueWithNodeRange (elementWrapper.wrap.getValue checkInfo.lookupTable)) elements.known of
+                case traverse (\element -> getValueWithNodeRange (elementWrapper.wrap.getValue checkInfo.lookupTable) element) elements.known of
                     Just wrappeds ->
                         Just
                             (Rule.errorWithFix
@@ -11649,7 +11689,7 @@ wrapperMapNChecks : TypeProperties (WrapperProperties otherProperties) -> CallCh
 wrapperMapNChecks wrapper checkInfo =
     if List.length checkInfo.argsAfterFirst == (checkInfo.argCount - 1) then
         -- fully applied
-        case traverse (getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable)) checkInfo.argsAfterFirst of
+        case traverse (\arg -> getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable) arg) checkInfo.argsAfterFirst of
             Just wraps ->
                 let
                     wrapFnDescription : String
@@ -11726,7 +11766,7 @@ mapNOrFirstEmptyConstructionChecks :
     -> CallCheckInfo
     -> Maybe (Error {})
 mapNOrFirstEmptyConstructionChecks emptiable checkInfo =
-    case findMapAndAllBefore (getEmptyExpressionNode checkInfo emptiable) checkInfo.argsAfterFirst of
+    case findMapAndAllBefore (\arg -> getEmptyExpressionNode checkInfo emptiable arg) checkInfo.argsAfterFirst of
         -- no empty arg found
         Nothing ->
             Nothing
@@ -12888,7 +12928,7 @@ onWrappedReturnsItsValueCheck wrapper =
         \checkInfo ->
             case fullyAppliedLastArg checkInfo of
                 Just wrapperArg ->
-                    case sameInAllBranches (getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable)) wrapperArg of
+                    case sameInAllBranches (\branch -> getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable) branch) wrapperArg of
                         Nothing ->
                             Nothing
 
@@ -12943,7 +12983,7 @@ onWrappedReturnsJustItsValueCheck wrapper =
         \checkInfo ->
             case fullyAppliedLastArg checkInfo of
                 Just withWrapArg ->
-                    case sameInAllBranches (getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable)) withWrapArg of
+                    case sameInAllBranches (\branch -> getValueWithNodeRange (wrapper.wrap.getValue checkInfo.lookupTable) branch) withWrapArg of
                         Just wraps ->
                             Just
                                 (Rule.errorWithFix
@@ -13659,7 +13699,7 @@ combineSingleElementFixes lookupTable nodes soFar =
 
 recordUpdateChecks : Range -> Node String -> List (Node Expression.RecordSetter) -> Maybe (Error {})
 recordUpdateChecks recordUpdateRange recordVariable fields =
-    case findMapNeighboring (getUnnecessaryRecordUpdateSetter (Node.value recordVariable)) fields of
+    case findMapNeighboring (\field -> getUnnecessaryRecordUpdateSetter (Node.value recordVariable) field) fields of
         Just unnecessarySetterAndNeighbors ->
             Just
                 (Rule.errorWithFix
@@ -16306,11 +16346,18 @@ getComparableExpressionHelper sign (Node _ expression) =
         Expression.ParenthesizedExpression expr ->
             getComparableExpressionHelper 1 expr
 
-        Expression.TupledExpression exprs ->
-            exprs |> traverseConcat (getComparableExpressionHelper 1)
+        Expression.TupledExpression [ part0, part1 ] ->
+            case getComparableExpressionHelper 1 part0 of
+                Nothing ->
+                    Nothing
 
-        Expression.ListExpr exprs ->
-            exprs |> traverseConcat (getComparableExpressionHelper 1)
+                Just part0Comparable ->
+                    getComparableExpressionHelper 1 part1
+                        |> Maybe.map
+                            (\part1Comparable -> part0Comparable ++ part1Comparable)
+
+        Expression.ListExpr elements ->
+            elements |> traverseConcat (\element -> getComparableExpressionHelper 1 element)
 
         _ ->
             Nothing
