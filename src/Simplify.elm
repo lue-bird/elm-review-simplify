@@ -923,6 +923,12 @@ Destructuring using case expressions
     List.sort (List.repeat n a)
     --> List.repeat n a
 
+    List.sort (Set.toList set)
+    --> Set.toList set
+
+    List.sort (Dict.toList dict)
+    --> Dict.toList dict
+
     List.sortBy (always a) list
     --> list
 
@@ -7418,6 +7424,8 @@ listSortChecks =
         , unnecessaryOnWrappedCheck listCollection
         , operationDoesNotChangeResultOfOperationCheck
         , unnecessaryOnSpecificFnCallCheck Fn.List.repeat
+        , unnecessaryOnSpecificFnCallCheck Fn.Set.toList
+        , unnecessaryOnSpecificFnCallCheck Fn.Dict.toList
         ]
 
 
