@@ -390,6 +390,12 @@ Destructuring using case expressions
     Tuple.second (Tuple.mapBoth changeFirst changeSecond tuple)
     --> changeSecond (Tuple.second tuple)
 
+    Tuple.mapFirst identity tuple
+    --> tuple
+
+    Tuple.mapSecond identity tuple
+    --> tuple
+
 
 ### Strings
 
@@ -4162,6 +4168,8 @@ intoFnChecks =
     , ( Fn.Basics.compare, ( 2, basicsCompareChecks ) )
     , ( Fn.Tuple.first, ( 1, tupleFirstChecks ) )
     , ( Fn.Tuple.second, ( 1, tupleSecondChecks ) )
+    , ( Fn.Tuple.mapFirst, ( 2, tupleMapFirstChecks ) )
+    , ( Fn.Tuple.mapSecond, ( 2, tupleMapSecondChecks ) )
     , ( Fn.Tuple.pair, ( 2, tuplePairChecks ) )
     , ( Fn.Maybe.map, ( 2, maybeMapChecks ) )
     , ( Fn.Maybe.map2, ( 3, maybeMapNChecks ) )
@@ -7416,6 +7424,22 @@ tuplePartOnMapPartCheck mapPartFn =
             else
                 Nothing
     }
+
+
+tupleMapFirstChecks : IntoFnCheck
+tupleMapFirstChecks =
+    intoFnCheckOnlyCall
+        (\checkInfo ->
+            mapIdentityChecks { represents = "tuple" } checkInfo
+        )
+
+
+tupleMapSecondChecks : IntoFnCheck
+tupleMapSecondChecks =
+    intoFnCheckOnlyCall
+        (\checkInfo ->
+            mapIdentityChecks { represents = "tuple" } checkInfo
+        )
 
 
 {-| For example with `{ earlier = "g" }`
@@ -14389,15 +14413,15 @@ emptiableMapChecks emptiable =
 
 
 mapIdentityChecks :
-    TypeProperties properties
+    { properties | represents : String }
     -> CallCheckInfo
     -> Maybe (Error {})
-mapIdentityChecks mappable checkInfo =
+mapIdentityChecks typeProperties checkInfo =
     if AstHelpers.isIdentity checkInfo checkInfo.firstArg then
         Just
             (alwaysReturnsLastArgError
                 (qualifiedToString checkInfo.fn ++ " with an identity function")
-                mappable
+                typeProperties
                 checkInfo
             )
 

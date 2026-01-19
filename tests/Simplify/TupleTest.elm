@@ -11,6 +11,8 @@ all =
         [ tuplePairTests
         , tupleFirstTests
         , tupleSecondTests
+        , tupleMapFirstTests
+        , tupleMapSecondTests
         ]
 
 
@@ -630,6 +632,100 @@ a = Tuple.second << Tuple.mapSecond f
                             }
                             |> Review.Test.whenFixed """module A exposing (..)
 a = (f << Tuple.second)
+"""
+                        ]
+        ]
+
+
+tupleMapFirstTests : Test
+tupleMapFirstTests =
+    describe "Tuple.mapFirst"
+        [ test "should not report Tuple.mapFirst used with okay arguments" <|
+            \() ->
+                """module A exposing (..)
+a0 = Tuple.mapFirst
+a1 = Tuple.mapFirst f
+a2 = Tuple.mapFirst f tuple
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectNoErrors
+        , test "should replace Tuple.mapFirst identity by identity tuple" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapFirst identity tuple
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapFirst with an identity function will always return the same given tuple"
+                            , details = [ "You can replace this call by the tuple itself." ]
+                            , under = "Tuple.mapFirst"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = tuple
+"""
+                        ]
+        , test "should replace Tuple.mapFirst identity by identity" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapFirst identity
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapFirst with an identity function will always return the same given tuple"
+                            , details = [ "You can replace this call by identity." ]
+                            , under = "Tuple.mapFirst"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = identity
+"""
+                        ]
+        ]
+
+
+tupleMapSecondTests : Test
+tupleMapSecondTests =
+    describe "Tuple.mapSecond"
+        [ test "should not report Tuple.mapSecond used with okay arguments" <|
+            \() ->
+                """module A exposing (..)
+a0 = Tuple.mapSecond
+a1 = Tuple.mapSecond f
+a2 = Tuple.mapSecond f tuple
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectNoErrors
+        , test "should replace Tuple.mapSecond identity by identity tuple" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapSecond identity tuple
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapSecond with an identity function will always return the same given tuple"
+                            , details = [ "You can replace this call by the tuple itself." ]
+                            , under = "Tuple.mapSecond"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = tuple
+"""
+                        ]
+        , test "should replace Tuple.mapSecond identity by identity" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapSecond identity
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapSecond with an identity function will always return the same given tuple"
+                            , details = [ "You can replace this call by identity." ]
+                            , under = "Tuple.mapSecond"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = identity
 """
                         ]
         ]
