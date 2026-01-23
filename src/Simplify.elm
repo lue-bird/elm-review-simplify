@@ -396,6 +396,12 @@ Destructuring using case expressions
     Tuple.mapSecond identity tuple
     --> tuple
 
+    Tuple.mapBoth identity f tuple
+    --> Tuple.mapFirst f tuple
+
+    Tuple.mapBoth identity f tuple
+    --> Tuple.mapSecond f tuple
+
 
 ### Strings
 
@@ -4170,6 +4176,7 @@ intoFnChecks =
     , ( Fn.Tuple.second, ( 1, tupleSecondChecks ) )
     , ( Fn.Tuple.mapFirst, ( 2, tupleMapFirstChecks ) )
     , ( Fn.Tuple.mapSecond, ( 2, tupleMapSecondChecks ) )
+    , ( Fn.Tuple.mapBoth, ( 3, tupleMapBothChecks ) )
     , ( Fn.Tuple.pair, ( 2, tuplePairChecks ) )
     , ( Fn.Maybe.map, ( 2, maybeMapChecks ) )
     , ( Fn.Maybe.map2, ( 3, maybeMapNChecks ) )
@@ -7440,6 +7447,157 @@ tupleMapSecondChecks =
         (\checkInfo ->
             mapIdentityChecks { represents = "tuple" } checkInfo
         )
+
+
+tupleMapBothChecks : IntoFnCheck
+tupleMapBothChecks =
+    intoFnCheckOnlyCall
+        (\checkInfo ->
+            if AstHelpers.isIdentity checkInfo checkInfo.firstArg then
+                Just
+                    (Rule.errorWithFix
+                        { message =
+                            qualifiedToString checkInfo.fn
+                                ++ " that maps the first part with an identity function is the same as "
+                                ++ qualifiedToString Fn.Tuple.mapSecond
+                        , details =
+                            [ "You can replace this call by "
+                                ++ qualifiedToString Fn.Tuple.mapSecond
+                                ++ (case checkInfo.argsAfterFirst of
+                                        [] ->
+                                            "."
+
+                                        [ _ ] ->
+                                            " with the second function argument given to the "
+                                                ++ qualifiedToString checkInfo.fn
+                                                ++ " call."
+
+                                        _ :: _ :: _ ->
+                                            " with the second function and the tuple argument given to the "
+                                                ++ qualifiedToString checkInfo.fn
+                                                ++ " call."
+                                   )
+                            ]
+                        }
+                        checkInfo.fnRange
+                        [ Fix.replaceRangeBy (Range.combine [ checkInfo.fnRange, Node.range checkInfo.firstArg ])
+                            (qualifiedToString (qualify Fn.Tuple.mapSecond checkInfo))
+                        ]
+                    )
+
+            else
+                case checkInfo.argsAfterFirst of
+                    [] ->
+                        Nothing
+
+                    mapSecondArg :: maybeThirdArg ->
+                        if AstHelpers.isIdentity checkInfo mapSecondArg then
+                            Just
+                                (Rule.errorWithFix
+                                    { message =
+                                        qualifiedToString checkInfo.fn
+                                            ++ " that maps the second part with an identity function is the same as "
+                                            ++ qualifiedToString Fn.Tuple.mapFirst
+                                    , details =
+                                        [ "You can replace this call by "
+                                            ++ qualifiedToString Fn.Tuple.mapFirst
+                                            ++ (case maybeThirdArg of
+                                                    [] ->
+                                                        " with the first function argument given to the "
+                                                            ++ qualifiedToString checkInfo.fn
+                                                            ++ " call."
+
+                                                    _ :: _ ->
+                                                        " with the first function and the tuple argument given to the "
+                                                            ++ qualifiedToString checkInfo.fn
+                                                            ++ " call."
+                                               )
+                                        ]
+                                    }
+                                    checkInfo.fnRange
+                                    (case maybeThirdArg of
+                                        [] ->
+                                            fixToCall
+                                                { argRange = checkInfo.parentRange
+                                                , fn = Fn.Tuple.mapFirst
+                                                , style = checkInfo.callStyle
+                                                }
+                                                checkInfo
+                                                :: replaceBySubExpressionFix checkInfo.parentRange
+                                                    checkInfo.firstArg
+
+                                        unmappedTupleArg :: _ ->
+                                            Fix.replaceRangeBy checkInfo.fnRange
+                                                (qualifiedToString (qualify Fn.Tuple.mapFirst checkInfo))
+                                                :: callWith3ArgsRemoveSecondArgFix
+                                                    { range = checkInfo.parentRange
+                                                    , fnRange = checkInfo.fnRange
+                                                    , firstArg = checkInfo.firstArg
+                                                    , style = checkInfo.callStyle
+                                                    , thirdArg = unmappedTupleArg
+                                                    }
+                                    )
+                                )
+
+                        else
+                            Nothing
+        )
+
+
+{-| Cleanly cut out the second argument of 3
+in an arbitrarily nested function call, like
+
+    (a1 |> (f <| a0)) a2
+    --> (f <| a0) a2
+
+    a2 |> (f a0 <| a1)
+    --> a2 |> (f a0)
+
+-}
+callWith3ArgsRemoveSecondArgFix :
+    { range : Range
+    , fnRange : Range
+    , firstArg : Node Expression
+    , style : FunctionCallStyle
+    , thirdArg : Node Expression
+    }
+    -> List Fix
+callWith3ArgsRemoveSecondArgFix call =
+    let
+        operationRangeToKeep : Range
+        operationRangeToKeep =
+            Range.combine
+                [ call.fnRange
+                , Node.range call.firstArg
+                ]
+    in
+    case call.style of
+        CallStyle.Application ->
+            [ Fix.replaceRangeBy
+                { start = call.range.start, end = operationRangeToKeep.start }
+                "("
+            , Fix.replaceRangeBy
+                { start = operationRangeToKeep.end, end = (Node.range call.thirdArg).start }
+                ") "
+            ]
+
+        CallStyle.Pipe CallStyle.RightToLeft ->
+            [ Fix.replaceRangeBy
+                { start = call.range.start, end = operationRangeToKeep.start }
+                "("
+            , Fix.replaceRangeBy
+                { start = operationRangeToKeep.end, end = (Node.range call.thirdArg).start }
+                ") <| "
+            ]
+
+        CallStyle.Pipe CallStyle.LeftToRight ->
+            [ Fix.replaceRangeBy
+                { start = (Node.range call.thirdArg).end, end = operationRangeToKeep.start }
+                " |> ("
+            , Fix.replaceRangeBy
+                { start = operationRangeToKeep.end, end = call.range.end }
+                ")"
+            ]
 
 
 {-| For example with `{ earlier = "g" }`

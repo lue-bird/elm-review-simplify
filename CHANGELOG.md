@@ -90,6 +90,8 @@ The rule now simplifies:
 - `List.map Tuple.first (Array.toIndexedList array)` to `List.range 0 (Array.length array - 1)`
 - `Tuple.mapFirst identity tuple` to `tuple`
 - `Tuple.mapSecond identity tuple` to `tuple`
+- `Tuple.mapBoth identity f tuple` to `Tuple.mapSecond f tuple`
+- `Tuple.mapBoth f identity tuple` to `Tuple.mapFirst f tuple`
 - comparison operations like `List.length l >= min -1 n` to `True` where intervals can be determined to always pass or fail the comparison
 
 Bug fixes:

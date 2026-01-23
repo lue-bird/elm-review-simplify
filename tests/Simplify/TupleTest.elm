@@ -13,6 +13,7 @@ all =
         , tupleSecondTests
         , tupleMapFirstTests
         , tupleMapSecondTests
+        , tupleMapBothTests
         ]
 
 
@@ -726,6 +727,118 @@ a = Tuple.mapSecond identity
                             }
                             |> Review.Test.whenFixed """module A exposing (..)
 a = identity
+"""
+                        ]
+        ]
+
+
+tupleMapBothTests : Test
+tupleMapBothTests =
+    describe "Tuple.mapBoth"
+        [ test "should not report Tuple.mapBoth used with okay arguments" <|
+            \() ->
+                """module A exposing (..)
+a0 = Tuple.mapBoth
+a1 = Tuple.mapBoth f
+a2 = Tuple.mapBoth f g
+a3 = Tuple.mapBoth f g tuple
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectNoErrors
+        , test "should replace Tuple.mapBoth identity by Tuple.mapSecond" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapBoth identity
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the first part with an identity function is the same as Tuple.mapSecond"
+                            , details = [ "You can replace this call by Tuple.mapSecond." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = Tuple.mapSecond
+"""
+                        ]
+        , test "should replace Tuple.mapBoth identity <| f <| x by Tuple.mapSecond <| f <| x" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapBoth identity <| f <| x
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the first part with an identity function is the same as Tuple.mapSecond"
+                            , details = [ "You can replace this call by Tuple.mapSecond with the second function argument given to the Tuple.mapBoth call." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = Tuple.mapSecond <| f <| x
+"""
+                        ]
+        , test "should replace Tuple.mapBoth identity f <| g <| x by Tuple.mapSecond f <| g <| x" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapBoth identity f <| g <| x
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the first part with an identity function is the same as Tuple.mapSecond"
+                            , details = [ "You can replace this call by Tuple.mapSecond with the second function and the tuple argument given to the Tuple.mapBoth call." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = Tuple.mapSecond f <| g <| x
+"""
+                        ]
+        , test "should replace Tuple.mapBoth (f x) <| (\\y -> y) by Tuple.mapFirst <| (f x)" <|
+            \() ->
+                """module A exposing (..)
+a = Tuple.mapBoth (f x) <| (\\y -> y)
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the second part with an identity function is the same as Tuple.mapFirst"
+                            , details = [ "You can replace this call by Tuple.mapFirst with the first function argument given to the Tuple.mapBoth call." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = Tuple.mapFirst <| (f x)
+"""
+                        ]
+        , test "should replace identity |> Tuple.mapBoth (f x) by (f x) |> Tuple.mapFirst" <|
+            \() ->
+                """module A exposing (..)
+a = identity |> Tuple.mapBoth (f x)
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the second part with an identity function is the same as Tuple.mapFirst"
+                            , details = [ "You can replace this call by Tuple.mapFirst with the first function argument given to the Tuple.mapBoth call." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = (f x) |> Tuple.mapFirst
+"""
+                        ]
+        , test "should replace tuple |> Tuple.mapBoth (f x) identity by tuple |> Tuple.mapFirst (f x)" <|
+            \() ->
+                """module A exposing (..)
+a = tuple |> Tuple.mapBoth (f x) identity
+"""
+                    |> Review.Test.run ruleWithDefaults
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Tuple.mapBoth that maps the second part with an identity function is the same as Tuple.mapFirst"
+                            , details = [ "You can replace this call by Tuple.mapFirst with the first function and the tuple argument given to the Tuple.mapBoth call." ]
+                            , under = "Tuple.mapBoth"
+                            }
+                            |> Review.Test.whenFixed """module A exposing (..)
+a = tuple |> (Tuple.mapFirst (f x))
 """
                         ]
         ]
